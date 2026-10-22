@@ -1,0 +1,74 @@
+name: Build Mush8 iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build Mush8.ipa
+    runs-on: macos-26
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Mush8
+        uses: actions/checkout@v4
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          uname -m
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen || brew upgrade xcodegen
+          xcodegen --version
+
+      - name: Install Rust 1.98.1
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          targets: aarch64-apple-ios
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mush8-ios
+
+      - name: Make build scripts executable
+        run: |
+          chmod +x ./make-ios.sh
+          chmod +x ./build.sh || true
+          chmod +x ./make-app.sh || true
+
+      - name: Build unsigned IPA
+        env:
+          RUST_BACKTRACE: "1"
+        run: |
+          ./make-ios.sh --ipa
+
+      - name: Verify IPA
+        run: |
+          if [ ! -f "build/Mush8.ipa" ]; then
+            echo "ERROR: build/Mush8.ipa was not created."
+            exit 1
+          fi
+          echo "Mush8 IPA successfully built:"
+          ls -lh build/Mush8.ipa
+
+      - name: Upload Mush8 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mush8-iOS-IPA
+          path: build/Mush8.ipa
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
